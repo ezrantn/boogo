@@ -8,12 +8,6 @@ import (
 )
 
 func TestBadHeap(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatalf("expected checker to reject program")
-		}
-	}()
-
 	prog := &boogie.Program{
 		Procs: []*boogie.Procedure{
 			{
@@ -23,7 +17,7 @@ func TestBadHeap(t *testing.T) {
 				},
 				Body: []boogie.Stmt{
 					&boogie.HeapRead{
-						Obj:   &boogie.VarExpr{V: boogie.Var{Name: "x"}},
+						Obj:   &boogie.VarExpr{V: boogie.Var{Name: "x", Ty: boogie.IntType{}}},
 						Field: "f",
 					},
 				},
@@ -31,5 +25,7 @@ func TestBadHeap(t *testing.T) {
 		},
 	}
 
-	ebs.Check(prog)
+	if err := ebs.Check(prog); err == nil {
+		t.Fatalf("expected checker to reject program")
+	}
 }

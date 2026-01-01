@@ -8,12 +8,6 @@ import (
 )
 
 func TestBadAssign(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatalf("expected checker to reject program")
-		}
-	}()
-
 	prog := &boogie.Program{
 		Procs: []*boogie.Procedure{
 			{
@@ -23,7 +17,9 @@ func TestBadAssign(t *testing.T) {
 				},
 				Body: []boogie.Stmt{
 					&boogie.Assign{
-						Lhs: &boogie.VarExpr{V: boogie.Var{Name: "x"}},
+						Lhs: &boogie.VarExpr{
+							V: boogie.Var{Name: "x", Ty: boogie.IntType{}},
+						},
 						Rhs: &boogie.BoolLit{Value: true}, // ❌
 					},
 				},
@@ -31,5 +27,7 @@ func TestBadAssign(t *testing.T) {
 		},
 	}
 
-	ebs.Check(prog)
+	if err := ebs.Check(prog); err == nil {
+		t.Fatalf("expected checker to reject program")
+	}
 }

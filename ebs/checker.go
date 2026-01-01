@@ -119,6 +119,9 @@ func checkStmt(
 	case *boogie.HeapWrite:
 		return checkHeapWrite(st)
 
+	case *boogie.HeapRead:
+		return fmt.Errorf("heap read cannot be used as a statement")
+
 	default:
 		return fmt.Errorf("unsupported statement in EBS v1: %T", s)
 	}
