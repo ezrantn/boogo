@@ -194,6 +194,7 @@ type HeapRead struct {
 }
 
 func (*HeapRead) isExpr() {}
+func (*HeapRead) isStmt() {}
 func (h *HeapRead) Type() Type {
 	return h.Ty
 }
