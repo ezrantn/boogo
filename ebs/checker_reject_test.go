@@ -177,3 +177,22 @@ func TestRejectBadReturn(t *testing.T) {
 
 	mustReject(t, p)
 }
+
+func TestEraseRemovesAssert(t *testing.T) {
+	p := &boogie.Program{
+		Procs: []*boogie.Procedure{
+			{
+				Name: "main",
+				Body: []boogie.Stmt{
+					&boogie.Assert{Cond: &boogie.BoolLit{Value: true}},
+					&boogie.Return{Values: nil},
+				},
+			},
+		},
+	}
+
+	e := Erase(p)
+	if len(e.Procs[0].Body) != 1 {
+		t.Fatalf("assert not erased")
+	}
+}
