@@ -56,6 +56,7 @@ func structBlock(cfg *CFG, id BlockID, seen map[BlockID]bool) ([]boogie.Stmt, er
 	if seen[id] {
 		return nil, fmt.Errorf("cycle not structured")
 	}
+
 	seen[id] = true
 
 	b := cfg.Blocks[id]
@@ -98,5 +99,6 @@ func copySeen(seen map[BlockID]bool) map[BlockID]bool {
 	for k, v := range seen {
 		cp[k] = v
 	}
+
 	return cp
 }
