@@ -1,6 +1,7 @@
 package ok
 
 import (
+	"os"
 	"testing"
 
 	"github.com/ezrantn/boogo/boogie"
@@ -61,4 +62,16 @@ func TestControl(t *testing.T) {
 	ebs.Check(prog)
 	ep := ebs.Erase(prog)
 	_ = boogo.EmitProgram(ep)
+}
+
+func TestControlE2E(t *testing.T) {
+	src, err := os.ReadFile("control.bpl")
+	if err != nil {
+		t.Fatalf("read input: %v", err)
+	}
+
+	_, err = boogo.Run(src)
+	if err != nil {
+		t.Fatalf("unexpected failure: %v", err)
+	}
 }

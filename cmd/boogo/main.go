@@ -4,8 +4,24 @@ import (
 	"strings"
 
 	"github.com/ezrantn/boogo/boogie"
+	"github.com/ezrantn/boogo/boogie/frontend"
 	"github.com/ezrantn/boogo/codegen"
+	"github.com/ezrantn/boogo/ebs"
 )
+
+func Run(src []byte) (string, error) {
+	prog, err := frontend.Parse(src)
+	if err != nil {
+		return "", err
+	}
+
+	if err := ebs.Check(prog); err != nil {
+		return "", err
+	}
+
+	ep := ebs.Erase(prog)
+	return EmitProgram(ep), nil
+}
 
 // EmitProgram emits a complete Go source file from a Boogie program.
 func EmitProgram(p *boogie.Program) string {

@@ -1,6 +1,7 @@
 package ok
 
 import (
+	"os"
 	"testing"
 
 	"github.com/ezrantn/boogo/boogie"
@@ -41,4 +42,22 @@ func TestArith(t *testing.T) {
 	ebs.Check(prog)
 	ep := ebs.Erase(prog)
 	_ = boogo.EmitProgram(ep)
+}
+
+func TestArithE2E(t *testing.T) {
+	src, err := os.ReadFile("arith.bpl")
+	if err != nil {
+		t.Fatalf("read input: %v", err)
+	}
+
+	// This should run:
+	// parse → CFG → structure → check → erase → emit
+	out, err := boogo.Run(src)
+	if err != nil {
+		t.Fatalf("unexpected failure: %v", err)
+	}
+
+	if len(out) == 0 {
+		t.Fatalf("expected generated Go code")
+	}
 }
