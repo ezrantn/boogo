@@ -66,7 +66,9 @@ const (
 	MUL
 	EQ
 	LT
-	LE
+	GT
+	GTE
+	LTE
 	AND
 	OR
 	NOT
@@ -83,6 +85,13 @@ func (l *Lexer) NextToken() Token {
 	ch := l.peek()
 	if ch == 0 {
 		return Token{Kind: EOF, Value: ""}
+	}
+
+	if ch == '/' {
+		if l.peek() == '/' { // You'd need a peekNext helper
+			l.skipLineComment()
+			return l.NextToken()
+		}
 	}
 
 	// Handle Identifiers and Keywords
@@ -125,9 +134,15 @@ func (l *Lexer) NextToken() Token {
 	case '<':
 		if l.peek() == '=' {
 			l.advance()
-			return Token{LE, "<="}
+			return Token{LTE, "<="}
 		}
 		return Token{LT, "<"}
+	case '>':
+		if l.peek() == '=' {
+			l.advance()
+			return Token{GTE, ">="}
+		}
+		return Token{GT, ">"}
 	case '=':
 		return Token{EQ, "="}
 	case '&':
@@ -145,6 +160,12 @@ func (l *Lexer) NextToken() Token {
 	}
 
 	return Token{EOF, ""} // Or handle as ILLEGAL token
+}
+
+func (l *Lexer) skipLineComment() {
+	for l.peek() != '\n' && l.peek() != 0 {
+		l.advance()
+	}
 }
 
 var keywords = map[string]TokenKind{

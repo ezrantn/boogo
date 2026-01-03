@@ -233,7 +233,7 @@ func checkBinOp(b *boogie.BinOp) error {
 
 		return requireType(b.Ty, boogie.IntType{})
 
-	case boogie.Eq, boogie.Lt, boogie.Le:
+	case boogie.Eq, boogie.Lt, boogie.Lte:
 		if !sameType(b.Left.Type(), b.Right.Type()) {
 			return fmt.Errorf("binary op operands must have same type")
 		}

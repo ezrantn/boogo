@@ -145,7 +145,9 @@ const (
 	Mul
 	Eq
 	Lt
-	Le
+	Lte
+	Gt
+	Gte
 	And
 	Or
 )

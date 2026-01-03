@@ -62,8 +62,14 @@ func emitBinOp(b *boogie.BinOp) string {
 	case boogie.Lt:
 		return "(" + l + " < " + r + ")"
 
-	case boogie.Le:
+	case boogie.Lte:
 		return "(" + l + " <= " + r + ")"
+
+	case boogie.Gt:
+		return "(" + l + " > " + r + ")"
+
+	case boogie.Gte:
+		return "(" + l + " >= " + r + ")"
 
 	case boogie.And:
 		return "(" + l + " && " + r + ")"

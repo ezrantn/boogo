@@ -148,7 +148,7 @@ func (p *Parser) parseExpression() boogie.Expr {
 
 	// Handle binary operations
 	switch p.curr.Kind {
-	case PLUS, MINUS, MUL, LT, LE, EQ:
+	case PLUS, MINUS, MUL, LT, LTE, EQ, GT, GTE:
 		opToken := p.curr.Kind
 		p.nextToken()
 		right := p.parseExpression()
@@ -173,10 +173,14 @@ func tokenToOp(kind TokenKind) boogie.BinOpKind {
 		return boogie.Mul
 	case LT:
 		return boogie.Lt
-	case LE:
-		return boogie.Le
+	case LTE:
+		return boogie.Lte
 	case EQ:
 		return boogie.Eq
+	case GT:
+		return boogie.Gt
+	case GTE:
+		return boogie.Gte
 	default:
 		panic("unsupported operator")
 	}
