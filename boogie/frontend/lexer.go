@@ -72,6 +72,8 @@ const (
 	AND
 	OR
 	NOT
+	ASSERT
+	ASSUME
 )
 
 type Token struct {

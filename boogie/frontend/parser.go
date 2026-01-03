@@ -240,6 +240,10 @@ func (p *Parser) parsePrimary() boogie.Expr {
 		expr := p.parseExpression(PREC_LOWEST)
 		p.expect(RPAREN) // consume )
 		return expr
+	case BOOL_LIT:
+		val, _ := strconv.ParseBool(p.curr.Value)
+		p.nextToken()
+		return &boogie.BoolLit{Value: val}
 	default:
 		panic(fmt.Sprintf("unexpected token: %v", p.curr.Kind))
 	}
@@ -249,6 +253,8 @@ func (p *Parser) parseStatements() []boogie.Stmt {
 	var stmts []boogie.Stmt
 	for p.curr.Kind != RBRACE && p.curr.Kind != EOF {
 		switch p.curr.Kind {
+		case ASSERT, ASSUME:
+			stmts = append(stmts, p.parseAssertAssume())
 		case VAR:
 			stmts = append(stmts, p.parseVarDecl())
 		case IDENT: // Likely an assignment: y := ...
@@ -264,7 +270,23 @@ func (p *Parser) parseStatements() []boogie.Stmt {
 			p.nextToken()
 		}
 	}
+
 	return stmts
+}
+
+func (p *Parser) parseAssertAssume() boogie.Stmt {
+	kind := p.curr.Kind
+	p.nextToken() // consume ASSERT or ASSUME
+
+	// Use PREC_LOWEST to allow full logical expressions (e.g., x > 0 && y == 2)
+	expr := p.parseExpression(PREC_LOWEST)
+	p.expect(SEMI)
+
+	if kind == ASSERT {
+		return &boogie.Assert{Cond: expr}
+	}
+
+	return &boogie.Assume{Cond: expr}
 }
 
 func (p *Parser) parseVarDecl() boogie.Stmt {

@@ -56,6 +56,12 @@ type LocalDecl struct {
 	V Var
 }
 
+type Assume struct {
+	Cond Expr
+}
+
+func (*Assume) isStmt() {}
+
 func (*LocalDecl) isStmt() {}
 
 type Assign struct {
