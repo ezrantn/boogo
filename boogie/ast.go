@@ -52,6 +52,12 @@ type Stmt interface {
 	isStmt()
 }
 
+type LocalDecl struct {
+	V Var
+}
+
+func (*LocalDecl) isStmt() {}
+
 type Assign struct {
 	Lhs Expr
 	Rhs Expr

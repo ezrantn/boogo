@@ -55,6 +55,39 @@ func NewParser(l *Lexer) *Parser {
 	return p
 }
 
+const (
+	PREC_LOWEST      = iota
+	PREC_EQUALS      // ==
+	PREC_LESSGREATER // > or <
+	PREC_SUM         // + or -
+	PREC_PRODUCT     // *
+)
+
+var precedences = map[TokenKind]int{
+	EQ:    PREC_EQUALS,
+	LT:    PREC_LESSGREATER,
+	LTE:   PREC_LESSGREATER,
+	GT:    PREC_LESSGREATER,
+	GTE:   PREC_LESSGREATER,
+	PLUS:  PREC_SUM,
+	MINUS: PREC_SUM,
+	MUL:   PREC_PRODUCT,
+}
+
+func (p *Parser) peekPrecedence() int {
+	if p, ok := precedences[p.peek.Kind]; ok {
+		return p
+	}
+	return PREC_LOWEST
+}
+
+func (p *Parser) currPrecedence() int {
+	if p, ok := precedences[p.curr.Kind]; ok {
+		return p
+	}
+	return PREC_LOWEST
+}
+
 func (p *Parser) nextToken() {
 	p.curr = p.peek
 	p.peek = p.lexer.NextToken()
@@ -143,23 +176,29 @@ func (p *Parser) parseType() boogie.Type {
 	}
 }
 
-func (p *Parser) parseExpression() boogie.Expr {
+func (p *Parser) parseExpression(precedence int) boogie.Expr {
+	// Parse the "Prefix" part (identifiers, numbers, or grouping)
 	left := p.parsePrimary()
 
-	// Handle binary operations
-	switch p.curr.Kind {
-	case PLUS, MINUS, MUL, LT, LTE, EQ, GT, GTE:
-		opToken := p.curr.Kind
-		p.nextToken()
-		right := p.parseExpression()
-
-		return &boogie.BinOp{
-			Op:    tokenToOp(opToken),
-			Left:  left,
-			Right: right,
-		}
+	// while the next token isn't a semicolon/brace
+	// and the next operator binds tighter than our current level
+	for p.curr.Kind != SEMI && p.curr.Kind != RPAREN && precedence < p.currPrecedence() {
+		left = p.parseInfix(left)
 	}
+
 	return left
+}
+
+func (p *Parser) parseInfix(left boogie.Expr) boogie.Expr {
+	kind := p.curr.Kind
+	prec := p.currPrecedence()
+	p.nextToken() // consume operator
+
+	return &boogie.BinOp{
+		Op:    tokenToOp(kind),
+		Left:  left,
+		Right: p.parseExpression(prec),
+	}
 }
 
 // Helper to map TokenKind to boogie.BinOpKind
@@ -191,13 +230,18 @@ func (p *Parser) parsePrimary() boogie.Expr {
 	case IDENT:
 		name := p.curr.Value
 		p.nextToken()
-		return &boogie.VarExpr{V: boogie.Var{Name: name}} // Ty resolved later
+		return &boogie.VarExpr{V: boogie.Var{Name: name}}
 	case INT_LIT:
 		val, _ := strconv.Atoi(p.curr.Value)
 		p.nextToken()
 		return &boogie.IntLit{Value: val}
+	case LPAREN:
+		p.nextToken() // consume (
+		expr := p.parseExpression(PREC_LOWEST)
+		p.expect(RPAREN) // consume )
+		return expr
 	default:
-		panic("unexpected token in expression")
+		panic(fmt.Sprintf("unexpected token: %v", p.curr.Kind))
 	}
 }
 
@@ -205,13 +249,15 @@ func (p *Parser) parseStatements() []boogie.Stmt {
 	var stmts []boogie.Stmt
 	for p.curr.Kind != RBRACE && p.curr.Kind != EOF {
 		switch p.curr.Kind {
+		case VAR:
+			stmts = append(stmts, p.parseVarDecl())
 		case IDENT: // Likely an assignment: y := ...
 			stmts = append(stmts, p.parseAssignment())
 		case IF:
 			stmts = append(stmts, p.parseIf())
 		case RETURN:
 			p.nextToken()
-			expr := p.parseExpression()
+			expr := p.parseExpression(PREC_LOWEST)
 			p.expect(SEMI)
 			stmts = append(stmts, &boogie.Return{Values: []boogie.Expr{expr}})
 		default:
@@ -221,12 +267,25 @@ func (p *Parser) parseStatements() []boogie.Stmt {
 	return stmts
 }
 
+func (p *Parser) parseVarDecl() boogie.Stmt {
+	p.expect(VAR)
+	name := p.curr.Value
+	p.expect(IDENT)
+	p.expect(COLON)
+	ty := p.parseType()
+	p.expect(SEMI)
+
+	return &boogie.LocalDecl{
+		V: boogie.Var{Name: name, Ty: ty},
+	}
+}
+
 func (p *Parser) parseIf() boogie.Stmt {
 	p.expect(IF)
 
 	// Parse condition, e.g., (z > 0)
 	p.expect(LPAREN)
-	cond := p.parseExpression()
+	cond := p.parseExpression(PREC_LOWEST)
 	p.expect(RPAREN)
 
 	// Parse 'then' block
@@ -259,7 +318,7 @@ func (p *Parser) parseAssignment() boogie.Stmt {
 	lhsName := p.curr.Value
 	p.expect(IDENT)
 	p.expect(ASSIGN)
-	rhs := p.parseExpression()
+	rhs := p.parseExpression(PREC_LOWEST)
 	p.expect(SEMI)
 
 	return &boogie.Assign{
