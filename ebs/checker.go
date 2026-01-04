@@ -97,6 +97,10 @@ func checkStmt(
 		return checkCall(st, procMap)
 
 	case *boogie.Return:
+		if len(st.Values) == 0 {
+			return nil
+		}
+
 		if len(st.Values) != len(proc.Rets) {
 			return fmt.Errorf("return arity mismatch: expected %d values, got %d", len(proc.Rets), len(st.Values))
 		}
@@ -231,14 +235,16 @@ func checkBinOp(b *boogie.BinOp) error {
 			return err
 		}
 
-		return requireType(b.Ty, boogie.IntType{})
+		b.Ty = boogie.IntType{}
+		return nil
 
-	case boogie.Eq, boogie.Lt, boogie.Lte:
+	case boogie.Eq, boogie.Lt, boogie.Lte, boogie.Gt, boogie.Gte:
 		if !sameType(b.Left.Type(), b.Right.Type()) {
 			return fmt.Errorf("binary op operands must have same type")
 		}
 
-		return requireType(b.Ty, boogie.BoolType{})
+		b.Ty = boogie.BoolType{}
+		return nil
 
 	case boogie.And, boogie.Or:
 		if err := requireBool(b.Left); err != nil {
@@ -249,7 +255,8 @@ func checkBinOp(b *boogie.BinOp) error {
 			return err
 		}
 
-		return requireType(b.Ty, boogie.BoolType{})
+		b.Ty = boogie.BoolType{}
+		return nil
 
 	default:
 		return fmt.Errorf("unsupported binary operator")

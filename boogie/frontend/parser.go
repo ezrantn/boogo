@@ -245,7 +245,7 @@ func (p *Parser) parsePrimary() boogie.Expr {
 		p.nextToken()
 		return &boogie.BoolLit{Value: val}
 	default:
-		panic(fmt.Sprintf("unexpected token: %v", p.curr.Kind))
+		panic(fmt.Sprintf("unexpected token %v (%s) at primary", p.curr.Kind, p.curr.Value))
 	}
 }
 
@@ -262,10 +262,16 @@ func (p *Parser) parseStatements() []boogie.Stmt {
 		case IF:
 			stmts = append(stmts, p.parseIf())
 		case RETURN:
-			p.nextToken()
-			expr := p.parseExpression(PREC_LOWEST)
+			p.nextToken() // consume 'return'
+			var returnValues []boogie.Expr
+
+			// If there is no semicolon immediately after return, try to parse an expression
+			if p.curr.Kind != SEMI {
+				returnValues = append(returnValues, p.parseExpression(PREC_LOWEST))
+			}
+
 			p.expect(SEMI)
-			stmts = append(stmts, &boogie.Return{Values: []boogie.Expr{expr}})
+			stmts = append(stmts, &boogie.Return{Values: returnValues})
 		default:
 			p.nextToken()
 		}
