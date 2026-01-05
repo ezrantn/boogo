@@ -118,8 +118,12 @@ type Expr interface {
 
 // ---------- Variables ----------
 
+type SymbolID int
+
 type VarExpr struct {
-	V Var
+	Name string   // The raw string for the parser
+	ID   SymbolID // Assigned by the resolver
+	V    Var      // Resolved information
 }
 
 func (*VarExpr) isExpr() {}

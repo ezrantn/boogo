@@ -7,17 +7,22 @@ import (
 )
 
 func Check(p *boogie.Program) error {
+	// 1. Map procedures for global lookup
 	procMap := make(map[string]*boogie.Procedure)
 	for _, proc := range p.Procs {
 		if _, ok := procMap[proc.Name]; ok {
 			return fmt.Errorf("duplicate procedure: %s", proc.Name)
 		}
-
 		procMap[proc.Name] = proc
 	}
 
+	// 2. Create the Type Context (Symbol Table)
+	tcx := NewTyCtx()
+
+	// 3. Run the checks
 	for _, proc := range p.Procs {
-		if err := checkProcedure(proc, procMap); err != nil {
+		// Pass BOTH the procedure-specific tcx and the global procMap
+		if err := checkProcedure(proc, tcx, procMap); err != nil {
 			return fmt.Errorf("procedure %s: %w", proc.Name, err)
 		}
 	}
@@ -29,21 +34,26 @@ func Check(p *boogie.Program) error {
 // Procedure Checking
 // ========================
 
-func checkProcedure(
-	proc *boogie.Procedure,
-	procMap map[string]*boogie.Procedure,
-) error {
+func checkProcedure(proc *boogie.Procedure, tcx *TyCtx, procMap map[string]*boogie.Procedure) error {
+	res := NewResolver()
+	res.EnterScope()
 
-	// Reject recursion (direct)
-	for _, stmt := range proc.Body {
-		if callsSelf(stmt, proc.Name) {
-			return fmt.Errorf("recursive call is not allowed in EBS v1")
-		}
+	for i := range proc.Params {
+		p := &proc.Params[i]
+		id := res.Define(p.Name)
+		tcx.NodeTypes[id] = p.Ty
+		tcx.Resolutions[id] = Definition{p.Name, "param"}
 	}
 
-	// Check body
+	for i := range proc.Locals {
+		l := &proc.Locals[i]
+		id := res.Define(l.Name)
+		tcx.NodeTypes[id] = l.Ty
+		tcx.Resolutions[id] = Definition{l.Name, "local"}
+	}
+
 	for _, stmt := range proc.Body {
-		if err := checkStmt(stmt, proc, procMap); err != nil {
+		if err := resolveAndCheckStmt(stmt, res, tcx, procMap); err != nil {
 			return err
 		}
 	}
@@ -51,83 +61,109 @@ func checkProcedure(
 	return nil
 }
 
+func resolveAndCheckExpr(e boogie.Expr, res *Resolver, tcx *TyCtx) error {
+	switch ex := e.(type) {
+	case *boogie.VarExpr:
+		id, ok := res.Resolve(ex.Name)
+		if !ok {
+			return fmt.Errorf("undefined variable: %s", ex.Name)
+		}
+		ex.ID = id
+		// Now ex.Type() will return the correct type from the map
+		ex.V.Ty = tcx.NodeTypes[id]
+		return nil
+
+	case *boogie.BinOp:
+		if err := resolveAndCheckExpr(ex.Left, res, tcx); err != nil {
+			return err
+		}
+		if err := resolveAndCheckExpr(ex.Right, res, tcx); err != nil {
+			return err
+		}
+		// Now checkBinOp(ex) will NOT find nil!
+		return checkBinOp(ex)
+	}
+	return nil
+}
+
 // ========================
 // Statement Checking
 // ========================
 
-func checkStmt(
-	s boogie.Stmt,
-	proc *boogie.Procedure,
-	procMap map[string]*boogie.Procedure,
-) error {
-
+func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[string]*boogie.Procedure) error {
 	switch st := s.(type) {
 
 	case *boogie.Assign:
+		if err := resolveAndCheckExpr(st.Rhs, res, tcx); err != nil {
+			return err
+		}
+		if err := resolveAndCheckExpr(st.Lhs, res, tcx); err != nil {
+			return err
+		}
 		return checkAssign(st)
 
 	case *boogie.If:
-		if err := checkExprBool(st.Cond); err != nil {
+		if err := resolveAndCheckExpr(st.Cond, res, tcx); err != nil {
 			return fmt.Errorf("if condition: %w", err)
 		}
-		for _, t := range st.Then {
-			if err := checkStmt(t, proc, procMap); err != nil {
+
+		res.EnterScope()
+		for _, sThen := range st.Then {
+			if err := resolveAndCheckStmt(sThen, res, tcx, procMap); err != nil {
 				return err
 			}
 		}
-		for _, e := range st.Else {
-			if err := checkStmt(e, proc, procMap); err != nil {
+		res.ExitScope()
+
+		res.EnterScope()
+		for _, sElse := range st.Else {
+			if err := resolveAndCheckStmt(sElse, res, tcx, procMap); err != nil {
 				return err
 			}
 		}
+		res.ExitScope()
 		return nil
 
 	case *boogie.While:
-		if err := checkExprBool(st.Cond); err != nil {
+		if err := resolveAndCheckExpr(st.Cond, res, tcx); err != nil {
 			return fmt.Errorf("while condition: %w", err)
 		}
+
+		res.EnterScope()
 		for _, b := range st.Body {
-			if err := checkStmt(b, proc, procMap); err != nil {
+			if err := resolveAndCheckStmt(b, res, tcx, procMap); err != nil {
 				return err
 			}
 		}
+		res.ExitScope()
 		return nil
 
 	case *boogie.Call:
+		// We need to resolve the arguments before checking the call
+		for _, arg := range st.Args {
+			if err := resolveAndCheckExpr(arg, res, tcx); err != nil {
+				return err
+			}
+		}
+		// Now use your existing checkCall logic
 		return checkCall(st, procMap)
 
 	case *boogie.Return:
-		if len(st.Values) == 0 {
-			return nil
-		}
-
-		if len(st.Values) != len(proc.Rets) {
-			return fmt.Errorf("return arity mismatch: expected %d values, got %d", len(proc.Rets), len(st.Values))
-		}
-
-		for i, v := range st.Values {
-			if err := checkExpr(v); err != nil {
+		for _, val := range st.Values {
+			if err := resolveAndCheckExpr(val, res, tcx); err != nil {
 				return err
 			}
-			if !sameType(v.Type(), proc.Rets[i].Ty) {
-				return fmt.Errorf("return type mismatch at index %d: expected %T, got %T", i, proc.Rets[i].Ty, v.Type())
-			}
 		}
-
 		return nil
 
-	case *boogie.Assert:
-		// Verification-only, but must be well-typed
-		return checkExprBool(st.Cond)
-
-	case *boogie.HeapWrite:
-		return checkHeapWrite(st)
-
-	case *boogie.HeapRead:
-		return fmt.Errorf("heap read cannot be used as a statement")
+	case *boogie.LocalDecl:
+		id := res.Define(st.V.Name)
+		tcx.NodeTypes[id] = st.V.Ty
+		tcx.Resolutions[id] = Definition{Name: st.V.Name, Kind: "local"}
+		return nil
 
 	default:
-		return fmt.Errorf("unsupported statement in EBS v1: %T", s)
+		return nil
 	}
 }
 
