@@ -135,6 +135,7 @@ func (e *VarExpr) Type() Type {
 
 type IntLit struct {
 	Value int
+	Ty    Type
 }
 
 func (*IntLit) isExpr() {}
@@ -144,6 +145,7 @@ func (*IntLit) Type() Type {
 
 type BoolLit struct {
 	Value bool
+	Ty    Type
 }
 
 func (*BoolLit) isExpr() {}

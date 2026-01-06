@@ -10,5 +10,3 @@ type Block struct {
 	Stmts []boogie.Stmt
 	Term  Terminator
 }
-
-

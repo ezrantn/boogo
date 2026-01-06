@@ -38,6 +38,7 @@ func checkProcedure(proc *boogie.Procedure, tcx *TyCtx, procMap map[string]*boog
 	res := NewResolver()
 	res.EnterScope()
 
+	// Register Parameters
 	for i := range proc.Params {
 		p := &proc.Params[i]
 		id := res.Define(p.Name)
@@ -45,6 +46,15 @@ func checkProcedure(proc *boogie.Procedure, tcx *TyCtx, procMap map[string]*boog
 		tcx.Resolutions[id] = Definition{p.Name, "param"}
 	}
 
+	// Register Return Values
+	for i := range proc.Rets {
+		r := &proc.Rets[i]
+		id := res.Define(r.Name)
+		tcx.NodeTypes[id] = r.Ty
+		tcx.Resolutions[id] = Definition{r.Name, "local"} // or "return"
+	}
+
+	// Register Locals
 	for i := range proc.Locals {
 		l := &proc.Locals[i]
 		id := res.Define(l.Name)
@@ -52,8 +62,10 @@ func checkProcedure(proc *boogie.Procedure, tcx *TyCtx, procMap map[string]*boog
 		tcx.Resolutions[id] = Definition{l.Name, "local"}
 	}
 
+	// Check Body
+	// Inside checkProcedure...
 	for _, stmt := range proc.Body {
-		if err := resolveAndCheckStmt(stmt, res, tcx, procMap); err != nil {
+		if err := resolveAndCheckStmt(stmt, res, tcx, procMap, proc); err != nil {
 			return err
 		}
 	}
@@ -66,11 +78,20 @@ func resolveAndCheckExpr(e boogie.Expr, res *Resolver, tcx *TyCtx) error {
 	case *boogie.VarExpr:
 		id, ok := res.Resolve(ex.Name)
 		if !ok {
-			return fmt.Errorf("undefined variable: %s", ex.Name)
+			// This is where your error is likely triggering
+			return fmt.Errorf("undefined variable: %q", ex.Name)
 		}
 		ex.ID = id
-		// Now ex.Type() will return the correct type from the map
 		ex.V.Ty = tcx.NodeTypes[id]
+		return nil
+
+	case *boogie.IntLit:
+		// Ensure the literal knows it is an int
+		ex.Ty = boogie.IntType{}
+		return nil
+
+	case *boogie.BoolLit:
+		ex.Ty = boogie.BoolType{}
 		return nil
 
 	case *boogie.BinOp:
@@ -80,8 +101,13 @@ func resolveAndCheckExpr(e boogie.Expr, res *Resolver, tcx *TyCtx) error {
 		if err := resolveAndCheckExpr(ex.Right, res, tcx); err != nil {
 			return err
 		}
-		// Now checkBinOp(ex) will NOT find nil!
 		return checkBinOp(ex)
+
+	case *boogie.UnOp:
+		if err := resolveAndCheckExpr(ex.X, res, tcx); err != nil {
+			return err
+		}
+		return checkUnOp(ex)
 	}
 	return nil
 }
@@ -90,7 +116,7 @@ func resolveAndCheckExpr(e boogie.Expr, res *Resolver, tcx *TyCtx) error {
 // Statement Checking
 // ========================
 
-func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[string]*boogie.Procedure) error {
+func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[string]*boogie.Procedure, cproc *boogie.Procedure) error {
 	switch st := s.(type) {
 
 	case *boogie.Assign:
@@ -103,55 +129,94 @@ func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[s
 		return checkAssign(st)
 
 	case *boogie.If:
+		if err := checkExprBool(st.Cond); err != nil {
+			return fmt.Errorf("if condition: %w", err)
+		}
+
+		if err := resolveAndCheckExpr(st.Cond, res, tcx); err != nil {
+			return err
+		}
+
+		if _, ok := st.Cond.Type().(boogie.BoolType); !ok {
+			return fmt.Errorf("if condition must be bool, got %T", st.Cond.Type())
+		}
+
 		if err := resolveAndCheckExpr(st.Cond, res, tcx); err != nil {
 			return fmt.Errorf("if condition: %w", err)
 		}
 
 		res.EnterScope()
 		for _, sThen := range st.Then {
-			if err := resolveAndCheckStmt(sThen, res, tcx, procMap); err != nil {
+			if err := resolveAndCheckStmt(sThen, res, tcx, procMap, cproc); err != nil {
 				return err
 			}
 		}
+
 		res.ExitScope()
 
 		res.EnterScope()
 		for _, sElse := range st.Else {
-			if err := resolveAndCheckStmt(sElse, res, tcx, procMap); err != nil {
+			if err := resolveAndCheckStmt(sElse, res, tcx, procMap, cproc); err != nil {
 				return err
 			}
 		}
+
 		res.ExitScope()
 		return nil
 
 	case *boogie.While:
+		if err := resolveAndCheckExpr(st.Cond, res, tcx); err != nil {
+			return err
+		}
+
+		if _, ok := st.Cond.Type().(boogie.BoolType); !ok {
+			return fmt.Errorf("while condition must be bool, got %T", st.Cond.Type())
+		}
+
 		if err := resolveAndCheckExpr(st.Cond, res, tcx); err != nil {
 			return fmt.Errorf("while condition: %w", err)
 		}
 
 		res.EnterScope()
 		for _, b := range st.Body {
-			if err := resolveAndCheckStmt(b, res, tcx, procMap); err != nil {
+			if err := resolveAndCheckStmt(b, res, tcx, procMap, cproc); err != nil {
 				return err
 			}
 		}
+
 		res.ExitScope()
 		return nil
 
 	case *boogie.Call:
-		// We need to resolve the arguments before checking the call
+		// RECURSION CHECK:
+		if st.Name == cproc.Name {
+			return fmt.Errorf("recursive calls are not allowed: %s calls itself", cproc)
+		}
+
+		// Resolve arguments
 		for _, arg := range st.Args {
 			if err := resolveAndCheckExpr(arg, res, tcx); err != nil {
 				return err
 			}
 		}
-		// Now use your existing checkCall logic
+
 		return checkCall(st, procMap)
 
 	case *boogie.Return:
-		for _, val := range st.Values {
+		// 1. Check arity (number of return values)
+		if len(st.Values) != len(cproc.Rets) {
+			return fmt.Errorf("return arity mismatch: expected %d values, got %d", len(cproc.Rets), len(st.Values))
+		}
+
+		// 2. Check types
+		for i, val := range st.Values {
 			if err := resolveAndCheckExpr(val, res, tcx); err != nil {
 				return err
+			}
+
+			// Compare the expression type to the signature's expected type
+			if !sameType(val.Type(), cproc.Rets[i].Ty) {
+				return fmt.Errorf("return type mismatch at index %d: expected %T, got %T", i, cproc.Rets[i].Ty, val.Type())
 			}
 		}
 		return nil
