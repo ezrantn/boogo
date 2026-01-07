@@ -21,10 +21,9 @@ Boogie is an intermediate verification language used by tools such as **Dafny**.
   Go (executable)
 ```
 
-Boogo does **not** interpret Boogie and does **not** use solvers at runtime.  
-The output is plain Go code compiled by the Go toolchain.
+Boogo does **not** interpret Boogie and does **not** use solvers at runtime. The output is plain Go code compiled by the Go toolchain.
 
-Ok? but why do we need executable Boogie?
+Ok? but why do we need Boogie to be executed?
 
 - Boogie is the verification boundary: it exposes explicit control flow and heap semantics after verification, making it the right level to execute verified programs.
 
@@ -86,8 +85,7 @@ There is no symbolic execution, no solver, and no runtime verification.
 
 ## Scope & Limitations
 
-Boogo intentionally targets a **small executable core** of Boogie.  
-Many verification-oriented features do not have a direct executable interpretation and are excluded.
+Boogo intentionally targets a **small executable core** of Boogie. Many verification-oriented features do not have a direct executable interpretation and are excluded.
 
 Extending support for richer Boogie features is future work.
 
@@ -100,7 +98,7 @@ Extending support for richer Boogie features is future work.
 
 ## License
 
-MIT (or specify)
+MIT
 
 ## Citation
 
