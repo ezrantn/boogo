@@ -98,7 +98,7 @@ Extending support for richer Boogie features is future work.
 
 ## License
 
-MIT
+[MIT License](https://github.com/ezrantn/boogo/blob/main/LICENSE).
 
 ## Citation
 
