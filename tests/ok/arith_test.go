@@ -1,7 +1,6 @@
 package ok
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
@@ -54,8 +53,6 @@ func TestArithE2E(t *testing.T) {
 	// This should run:
 	// parse → CFG → structure → check → erase → emit
 	out, err := boogo.Run(src)
-	fmt.Println(src)
-
 	if err != nil {
 		t.Fatalf("unexpected failure: %v", err)
 	}

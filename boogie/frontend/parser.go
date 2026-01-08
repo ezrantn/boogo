@@ -91,6 +91,7 @@ func (p *Parser) currPrecedence() int {
 func (p *Parser) nextToken() {
 	p.curr = p.peek
 	p.peek = p.lexer.NextToken()
+	fmt.Printf("Token: %v Value: %q\n", p.curr.Kind, p.curr.Value)
 }
 
 func (p *Parser) expect(kind TokenKind) {
@@ -227,6 +228,14 @@ func tokenToOp(kind TokenKind) boogie.BinOpKind {
 
 func (p *Parser) parsePrimary() boogie.Expr {
 	switch p.curr.Kind {
+	case MINUS: // Unary Negation: -x
+		p.nextToken()                           // consume '-'
+		expr := p.parseExpression(PREC_PRODUCT) // Use high precedence
+		return &boogie.UnOp{Op: boogie.Neg, X: expr}
+	case NOT: // Unary Not: !condition
+		p.nextToken() // consume '!'
+		expr := p.parseExpression(PREC_PRODUCT)
+		return &boogie.UnOp{Op: boogie.Not, X: expr}
 	case IDENT:
 		name := p.curr.Value
 		p.nextToken()
@@ -344,8 +353,13 @@ func (p *Parser) parseIf() boogie.Stmt {
 
 func (p *Parser) parseAssignment() boogie.Stmt {
 	lhsName := p.curr.Value
+	if lhsName == "" {
+		panic("Parser error: assignment LHS name is empty")
+	}
+
 	p.expect(IDENT)
 	p.expect(ASSIGN)
+
 	rhs := p.parseExpression(PREC_LOWEST)
 	p.expect(SEMI)
 

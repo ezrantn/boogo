@@ -24,6 +24,10 @@ func (r *Resolver) ExitScope() {
 
 // Define binds a name to a new unique ID in the current scope
 func (r *Resolver) Define(name string) boogie.SymbolID {
+	if name == "" {
+		panic("EBS: Attempted to define a variable with an empty name")
+	}
+
 	id := r.nextID
 	r.nextID++
 	current := r.scopes[len(r.scopes)-1]

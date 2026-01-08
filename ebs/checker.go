@@ -36,27 +36,36 @@ func Check(p *boogie.Program) error {
 
 func checkProcedure(proc *boogie.Procedure, tcx *TyCtx, procMap map[string]*boogie.Procedure) error {
 	res := NewResolver()
-	res.EnterScope()
 
 	// Register Parameters
 	for i := range proc.Params {
 		p := &proc.Params[i]
+		if p.Name == "" {
+			return fmt.Errorf("param %d has no name", i)
+		}
 		id := res.Define(p.Name)
 		tcx.NodeTypes[id] = p.Ty
 		tcx.Resolutions[id] = Definition{p.Name, "param"}
 	}
 
-	// Register Return Values
+	// Register Return Values (In Boogie, these are accessible like locals)
 	for i := range proc.Rets {
 		r := &proc.Rets[i]
+		if r.Name == "" {
+			return fmt.Errorf("return var %d has no name", i)
+		}
 		id := res.Define(r.Name)
 		tcx.NodeTypes[id] = r.Ty
-		tcx.Resolutions[id] = Definition{r.Name, "local"} // or "return"
+		tcx.Resolutions[id] = Definition{r.Name, "local"}
 	}
 
 	// Register Locals
 	for i := range proc.Locals {
 		l := &proc.Locals[i]
+		if l.Name == "" {
+			return fmt.Errorf("local %d has no name", i)
+		}
+
 		id := res.Define(l.Name)
 		tcx.NodeTypes[id] = l.Ty
 		tcx.Resolutions[id] = Definition{l.Name, "local"}
@@ -76,11 +85,13 @@ func checkProcedure(proc *boogie.Procedure, tcx *TyCtx, procMap map[string]*boog
 func resolveAndCheckExpr(e boogie.Expr, res *Resolver, tcx *TyCtx) error {
 	switch ex := e.(type) {
 	case *boogie.VarExpr:
-		id, ok := res.Resolve(ex.Name)
+		nameToResolve := ex.V.Name
+
+		id, ok := res.Resolve(nameToResolve)
 		if !ok {
-			// This is where your error is likely triggering
-			return fmt.Errorf("undefined variable: %q", ex.Name)
+			return fmt.Errorf("undefined variable: %q", nameToResolve)
 		}
+
 		ex.ID = id
 		ex.V.Ty = tcx.NodeTypes[id]
 		return nil
@@ -98,15 +109,18 @@ func resolveAndCheckExpr(e boogie.Expr, res *Resolver, tcx *TyCtx) error {
 		if err := resolveAndCheckExpr(ex.Left, res, tcx); err != nil {
 			return err
 		}
+
 		if err := resolveAndCheckExpr(ex.Right, res, tcx); err != nil {
 			return err
 		}
+
 		return checkBinOp(ex)
 
 	case *boogie.UnOp:
 		if err := resolveAndCheckExpr(ex.X, res, tcx); err != nil {
 			return err
 		}
+
 		return checkUnOp(ex)
 	}
 	return nil
@@ -203,7 +217,12 @@ func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[s
 		return checkCall(st, procMap)
 
 	case *boogie.Return:
-		// 1. Check arity (number of return values)
+		// Check arity (number of return values)
+		if len(st.Values) == 0 {
+			return nil
+		}
+
+		// Check arity if explicit values are provided
 		if len(st.Values) != len(cproc.Rets) {
 			return fmt.Errorf("return arity mismatch: expected %d values, got %d", len(cproc.Rets), len(st.Values))
 		}
@@ -219,6 +238,7 @@ func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[s
 				return fmt.Errorf("return type mismatch at index %d: expected %T, got %T", i, cproc.Rets[i].Ty, val.Type())
 			}
 		}
+
 		return nil
 
 	case *boogie.LocalDecl:

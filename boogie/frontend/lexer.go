@@ -161,7 +161,7 @@ func (l *Lexer) NextToken() Token {
 		return Token{NOT, "!"}
 	}
 
-	return Token{EOF, ""} // Or handle as ILLEGAL token
+	return Token{EOF, ""} // Or handle as ILLEGAL token?
 }
 
 func (l *Lexer) skipLineComment() {

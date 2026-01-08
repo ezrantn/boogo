@@ -12,11 +12,11 @@ import (
 func Run(src []byte) (string, error) {
 	prog, err := frontend.Parse(src)
 	if err != nil {
-		return "", err
+		return "error from frontend.Parse", err
 	}
 
 	if err := ebs.Check(prog); err != nil {
-		return "", err
+		return "error from ebs.Check", err
 	}
 
 	ep := ebs.Erase(prog)
