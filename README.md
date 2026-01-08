@@ -102,5 +102,5 @@ Extending support for richer Boogie features is future work.
 
 ## Citation
 
-> _An Executable Subset of the Boogie Intermediate Language_  
+> _An Executable Subset of the Boogie Intermediate Verification Language_  
 > (Work in progress)
