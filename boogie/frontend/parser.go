@@ -98,7 +98,7 @@ func (p *Parser) currPrecedence() int {
 func (p *Parser) nextToken() {
 	p.curr = p.peek
 	p.peek = p.lexer.NextToken()
-	fmt.Printf("Token: %v Value: %q\n", p.curr.Kind, p.curr.Value)
+	// fmt.Printf("Token: %v Value: %q\n", p.curr.Kind, p.curr.Value)
 }
 
 func (p *Parser) expect(kind TokenKind) {
@@ -290,8 +290,6 @@ func (p *Parser) parseStatements() []boogie.Stmt {
 			stmts = append(stmts, p.parseVarDecl())
 		case IDENT:
 			if p.peek.Kind == COLON {
-				// Instead of panic, you could set a flag or return an error
-				// For now, let's look at how to stop the parser cleanly
 				p.error = fmt.Errorf("labels are not supported")
 				return nil
 			}

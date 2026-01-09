@@ -1,9 +1,11 @@
 package boogo
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/ezrantn/boogo/boogie"
+	"github.com/ezrantn/boogo/boogie/cfg"
 	"github.com/ezrantn/boogo/boogie/frontend"
 	"github.com/ezrantn/boogo/codegen"
 	"github.com/ezrantn/boogo/ebs"
@@ -13,6 +15,34 @@ func Run(src []byte) (string, error) {
 	prog, err := frontend.Parse(src)
 	if err != nil {
 		return "error from frontend.Parse", err
+	}
+
+	for _, proc := range prog.Procs {
+		// Lower structured Boogie → CFG
+		blocks, entry, err := cfg.LowerProcToCFG(proc)
+		if len(blocks) == 0 {
+			return "", fmt.Errorf("empty CFG for procedure %s", proc.Name)
+		}
+
+		if err != nil {
+			return "", err
+		}
+
+		c := cfg.BuildCFG(blocks, entry)
+
+		// Analysis
+		dom := cfg.ComputeDominators(c)
+		loops := cfg.FindLoops(c, dom)
+		_ = loops // intentionally unused (for now)
+
+		// Structure CFG → structured AST
+		stmts, err := cfg.Structure(c)
+		if err != nil {
+			return "", err
+		}
+
+		// Replace procedure body
+		proc.Body = stmts
 	}
 
 	if err := ebs.Check(prog); err != nil {

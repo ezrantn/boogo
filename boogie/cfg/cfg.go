@@ -14,6 +14,24 @@ type CFG struct {
 	Succ map[BlockID][]BlockID
 }
 
+type lowerCtx struct {
+	nextID BlockID
+	blocks []*Block
+}
+
+func newLowerCtx() *lowerCtx {
+	return &lowerCtx{nextID: 0}
+}
+
+func (c *lowerCtx) newBlock() *Block {
+	b := &Block{
+		ID: c.nextID,
+	}
+	c.nextID++
+	c.blocks = append(c.blocks, b)
+	return b
+}
+
 func BuildCFG(blocks []*Block, entry BlockID) *CFG {
 	cfg := &CFG{
 		Entry:  entry,
@@ -45,6 +63,103 @@ func BuildCFG(blocks []*Block, entry BlockID) *CFG {
 	}
 
 	return cfg
+}
+
+func LowerProcToCFG(p *boogie.Procedure) ([]*Block, BlockID, error) {
+	ctx := newLowerCtx()
+
+	entry := ctx.newBlock()
+	last, err := lowerStmts(ctx, entry, p.Body)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if last != nil && last.Term == nil {
+		last.Term = &Return{}
+	}
+
+	return ctx.blocks, entry.ID, nil
+}
+
+func lowerStmts(ctx *lowerCtx, cur *Block, stmts []boogie.Stmt) (*Block, error) {
+	for _, s := range stmts {
+		switch t := s.(type) {
+
+		case *boogie.Assign, *boogie.Assert, *boogie.Assume:
+			cur.Stmts = append(cur.Stmts, s)
+
+		case *boogie.Return:
+			cur.Term = &Return{Values: t.Values}
+			return nil, nil
+
+		case *boogie.If:
+			return lowerIf(ctx, cur, t)
+
+		case *boogie.While:
+			return lowerWhile(ctx, cur, t)
+
+		default:
+			return nil, fmt.Errorf("unsupported stmt in EBS: %T", s)
+		}
+	}
+
+	return cur, nil
+}
+
+func lowerIf(ctx *lowerCtx, cur *Block, s *boogie.If) (*Block, error) {
+	thenBlock := ctx.newBlock()
+	elseBlock := ctx.newBlock()
+	join := ctx.newBlock()
+
+	cur.Term = &If{
+		Cond: s.Cond,
+		Then: thenBlock.ID,
+		Else: elseBlock.ID,
+	}
+
+	thenEnd, err := lowerStmts(ctx, thenBlock, s.Then)
+	if err != nil {
+		return nil, err
+	}
+	if thenEnd != nil {
+		thenEnd.Term = &Goto{Targets: []BlockID{join.ID}}
+	}
+
+	elseEnd, err := lowerStmts(ctx, elseBlock, s.Else)
+	if err != nil {
+		return nil, err
+	}
+	if elseEnd != nil {
+		elseEnd.Term = &Goto{Targets: []BlockID{join.ID}}
+	}
+
+	return join, nil
+}
+
+func lowerWhile(ctx *lowerCtx, cur *Block, s *boogie.While) (*Block, error) {
+	header := ctx.newBlock()
+	body := ctx.newBlock()
+	exit := ctx.newBlock()
+
+	// jump to header
+	cur.Term = &Goto{Targets: []BlockID{header.ID}}
+
+	// condition
+	header.Term = &If{
+		Cond: s.Cond,
+		Then: body.ID,
+		Else: exit.ID,
+	}
+
+	bodyEnd, err := lowerStmts(ctx, body, s.Body)
+	if err != nil {
+		return nil, err
+	}
+	if bodyEnd != nil {
+		bodyEnd.Term = &Goto{Targets: []BlockID{header.ID}}
+	}
+
+	return exit, nil
 }
 
 func Structure(cfg *CFG) ([]boogie.Stmt, error) {
