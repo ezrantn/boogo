@@ -62,7 +62,7 @@ func emitReturns(vars []boogie.Var) string {
 
 	var rs []string
 	for _, v := range vars {
-		rs = append(rs, goType(v.Ty))
+		rs = append(rs, v.Name+" "+goType(v.Ty))
 	}
 	return "(" + strings.Join(rs, ", ") + ")"
 }

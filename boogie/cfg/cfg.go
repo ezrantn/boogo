@@ -164,49 +164,59 @@ func lowerWhile(ctx *lowerCtx, cur *Block, s *boogie.While) (*Block, error) {
 
 func Structure(cfg *CFG) ([]boogie.Stmt, error) {
 	visited := make(map[BlockID]bool)
+	// TODO:
+	// We need a way to find where branches meet (Post-Dominators)
+	// For now, let's focus on the recursive fix.
 	return structBlock(cfg, cfg.Entry, visited)
 }
 
 func structBlock(cfg *CFG, id BlockID, seen map[BlockID]bool) ([]boogie.Stmt, error) {
 	if seen[id] {
-		return nil, fmt.Errorf("cycle not structured")
+		return nil, nil // Stop recursion if we've seen this (loop header or join)
+	}
+
+	b, ok := cfg.Blocks[id]
+	if !ok {
+		return nil, nil
 	}
 
 	seen[id] = true
-
-	b := cfg.Blocks[id]
-	stmts := append([]boogie.Stmt{}, b.Stmts...)
+	var result []boogie.Stmt
+	result = append(result, b.Stmts...)
 
 	switch t := b.Term.(type) {
-
 	case *Return:
-		return append(stmts, &boogie.Return{Values: t.Values}), nil
+		result = append(result, &boogie.Return{Values: t.Values})
+		return result, nil
 
 	case *If:
-		thenStmts, err := structBlock(cfg, t.Then, copySeen(seen))
-		if err != nil {
-			return nil, err
-		}
+		thenStmts, _ := structBlock(cfg, t.Then, copySeen(seen))
+		elseStmts, _ := structBlock(cfg, t.Else, copySeen(seen))
 
-		elseStmts, err := structBlock(cfg, t.Else, copySeen(seen))
-		if err != nil {
-			return nil, err
-		}
-
-		return append(stmts, &boogie.If{
+		result = append(result, &boogie.If{
 			Cond: t.Cond,
 			Then: thenStmts,
 			Else: elseStmts,
-		}), nil
+		})
+
+		// TODO:
+		// IMPORTANT: In our lowerIf, we have a 'join' block.
+		// We need to find it and continue structuring FROM there
+		// after the If statement is closed.
+		// joinID := findJoinPoint(t.Then, t.Else)
+		// rest, _ := structBlock(cfg, joinID, seen)
+		// result = append(result, rest...)
 
 	case *Goto:
 		if len(t.Targets) == 1 {
-			return structBlock(cfg, t.Targets[0], seen)
+			next, err := structBlock(cfg, t.Targets[0], seen)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, next...)
 		}
-		return nil, fmt.Errorf("unsupported goto")
 	}
-
-	return nil, fmt.Errorf("unsupported terminator: %T", b.Term)
+	return result, nil
 }
 
 func copySeen(seen map[BlockID]bool) map[BlockID]bool {

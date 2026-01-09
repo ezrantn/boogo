@@ -60,11 +60,6 @@ func EmitProgram(p *boogie.Program) string {
 	// Package header
 	b.WriteString("package main\n\n")
 
-	// Imports (minimal, explicit)
-	b.WriteString("import (\n")
-	b.WriteString("\t\"fmt\"\n")
-	b.WriteString(")\n\n")
-
 	// Runtime heap
 	b.WriteString(emitHeapRuntime())
 

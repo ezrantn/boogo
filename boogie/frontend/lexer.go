@@ -91,7 +91,7 @@ func (l *Lexer) NextToken() Token {
 	}
 
 	if ch == '/' {
-		if l.peek() == '/' { // You'd need a peekNext helper
+		if l.peek() == '/' {
 			l.skipLineComment()
 			return l.NextToken()
 		}

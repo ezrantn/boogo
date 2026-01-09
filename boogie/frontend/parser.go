@@ -179,7 +179,8 @@ func (p *Parser) parseType() boogie.Type {
 	case "bool":
 		return boogie.BoolType{}
 	default:
-		// You can expand this for bitvectors: case "bv32": ...
+		// We can expand this for bitvectors: case "bv32": ... or etc
+		// But currently we only support int primitives
 		return boogie.IntType{}
 	}
 }
