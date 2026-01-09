@@ -38,9 +38,16 @@ type Parser struct {
 	lexer *Lexer
 	curr  Token
 	peek  Token
+	error error
 }
 
-func Parse(src []byte) (*boogie.Program, error) {
+func Parse(src []byte) (prog *boogie.Program, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("parse error: %v", r)
+		}
+	}()
+
 	l := NewLexer(string(src))
 	p := NewParser(l)
 
@@ -195,10 +202,21 @@ func (p *Parser) parseInfix(left boogie.Expr) boogie.Expr {
 	prec := p.currPrecedence()
 	p.nextToken() // consume operator
 
+	right := p.parseExpression(prec)
+	var resTy boogie.Type
+
+	switch kind {
+	case LT, LTE, GT, GTE, EQ:
+		resTy = boogie.BoolType{}
+	default:
+		resTy = boogie.IntType{}
+	}
+
 	return &boogie.BinOp{
 		Op:    tokenToOp(kind),
 		Left:  left,
-		Right: p.parseExpression(prec),
+		Right: right,
+		Ty:    resTy,
 	}
 }
 
@@ -231,7 +249,11 @@ func (p *Parser) parsePrimary() boogie.Expr {
 	case MINUS: // Unary Negation: -x
 		p.nextToken()                           // consume '-'
 		expr := p.parseExpression(PREC_PRODUCT) // Use high precedence
-		return &boogie.UnOp{Op: boogie.Neg, X: expr}
+		return &boogie.UnOp{
+			Op: boogie.Neg,
+			X:  expr,
+			Ty: boogie.IntType{},
+		}
 	case NOT: // Unary Not: !condition
 		p.nextToken() // consume '!'
 		expr := p.parseExpression(PREC_PRODUCT)
@@ -266,8 +288,17 @@ func (p *Parser) parseStatements() []boogie.Stmt {
 			stmts = append(stmts, p.parseAssertAssume())
 		case VAR:
 			stmts = append(stmts, p.parseVarDecl())
-		case IDENT: // Likely an assignment: y := ...
+		case IDENT:
+			if p.peek.Kind == COLON {
+				// Instead of panic, you could set a flag or return an error
+				// For now, let's look at how to stop the parser cleanly
+				p.error = fmt.Errorf("labels are not supported")
+				return nil
+			}
 			stmts = append(stmts, p.parseAssignment())
+		case GOTO:
+			p.error = fmt.Errorf("goto is not supported")
+			return nil
 		case IF:
 			stmts = append(stmts, p.parseIf())
 		case RETURN:

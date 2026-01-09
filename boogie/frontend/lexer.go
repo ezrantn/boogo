@@ -74,6 +74,7 @@ const (
 	NOT
 	ASSERT
 	ASSUME
+	GOTO
 )
 
 type Token struct {
@@ -180,6 +181,7 @@ var keywords = map[string]TokenKind{
 	"return":    RETURN,
 	"true":      BOOL_LIT,
 	"false":     BOOL_LIT,
+	"goto":      GOTO,
 }
 
 func (l *Lexer) lexIdentifier() Token {

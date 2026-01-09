@@ -137,18 +137,20 @@ func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[s
 		if err := resolveAndCheckExpr(st.Rhs, res, tcx); err != nil {
 			return err
 		}
+
 		if err := resolveAndCheckExpr(st.Lhs, res, tcx); err != nil {
 			return err
 		}
+
 		return checkAssign(st)
 
 	case *boogie.If:
-		if err := checkExprBool(st.Cond); err != nil {
-			return fmt.Errorf("if condition: %w", err)
+		if err := resolveAndCheckExpr(st.Cond, res, tcx); err != nil {
+			return fmt.Errorf("if condition resolution: %w", err)
 		}
 
-		if err := resolveAndCheckExpr(st.Cond, res, tcx); err != nil {
-			return err
+		if err := checkExprBool(st.Cond); err != nil {
+			return fmt.Errorf("if condition type error: %w", err)
 		}
 
 		if _, ok := st.Cond.Type().(boogie.BoolType); !ok {
@@ -183,8 +185,8 @@ func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[s
 			return err
 		}
 
-		if _, ok := st.Cond.Type().(boogie.BoolType); !ok {
-			return fmt.Errorf("while condition must be bool, got %T", st.Cond.Type())
+		if err := checkExprBool(st.Cond); err != nil {
+			return err
 		}
 
 		if err := resolveAndCheckExpr(st.Cond, res, tcx); err != nil {
@@ -246,9 +248,27 @@ func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[s
 		tcx.NodeTypes[id] = st.V.Ty
 		tcx.Resolutions[id] = Definition{Name: st.V.Name, Kind: "local"}
 		return nil
+	case *boogie.HeapRead:
+		// Resolve variables inside the expression (like the 'Obj')
+		if err := resolveAndCheckExpr(st.Obj, res, tcx); err != nil {
+			return err
+		}
+
+		// Perform the semantic check (ensuring Obj is a RefType)
+		return checkHeapRead(st)
+	case *boogie.HeapWrite:
+		if err := resolveAndCheckExpr(st.Obj, res, tcx); err != nil {
+			return err
+		}
+
+		if err := resolveAndCheckExpr(st.Value, res, tcx); err != nil {
+			return err
+		}
+
+		return checkHeapWrite(st)
 
 	default:
-		return nil
+		return fmt.Errorf("unsupported statement type: %T", s)
 	}
 }
 
