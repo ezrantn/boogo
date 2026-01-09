@@ -1,7 +1,7 @@
 # boogo
 
 > [!WARNING]
-> ⚠️ This is an experimental research project.
+> This is an experimental research project.
 
 ---
 
