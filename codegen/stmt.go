@@ -30,6 +30,10 @@ func EmitStmt(s boogie.Stmt, indent int) string {
 	case *boogie.HeapWrite:
 		return emitHeapWrite(st, indent)
 
+	case *boogie.Assert:
+		cond := EmitExpr(st.Cond)
+		return indentStr(indent) + "if !" + cond + " { panic(\"Assertion failed\") }\n"
+
 	default:
 		panic(fmt.Sprintf("unsupported statement in codegen: %T", s))
 	}
