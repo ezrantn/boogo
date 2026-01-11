@@ -45,7 +45,10 @@ func checkProcedure(proc *boogie.Procedure, tcx *TyCtx, procMap map[string]*boog
 		}
 		id := res.Define(p.Name)
 		tcx.NodeTypes[id] = p.Ty
-		tcx.Resolutions[id] = Definition{p.Name, "param"}
+		tcx.Resolutions[id] = Definition{
+			Name: p.Name,
+			Kind: "param",
+		}
 	}
 
 	// Register Return Values (In Boogie, these are accessible like locals)
@@ -56,7 +59,10 @@ func checkProcedure(proc *boogie.Procedure, tcx *TyCtx, procMap map[string]*boog
 		}
 		id := res.Define(r.Name)
 		tcx.NodeTypes[id] = r.Ty
-		tcx.Resolutions[id] = Definition{r.Name, "local"}
+		tcx.Resolutions[id] = Definition{
+			Name: r.Name,
+			Kind: "local",
+		}
 	}
 
 	// Register Locals
@@ -68,7 +74,10 @@ func checkProcedure(proc *boogie.Procedure, tcx *TyCtx, procMap map[string]*boog
 
 		id := res.Define(l.Name)
 		tcx.NodeTypes[id] = l.Ty
-		tcx.Resolutions[id] = Definition{l.Name, "local"}
+		tcx.Resolutions[id] = Definition{
+			Name: l.Name,
+			Kind: "local",
+		}
 	}
 
 	// Check Body

@@ -118,9 +118,7 @@ func lowerIf(ctx *lowerCtx, cur *Block, s *boogie.If) (*Block, error) {
 	}
 
 	thenEnd, err := lowerStmts(ctx, thenBlock, s.Then)
-	if err != nil {
-		return nil, err
-	}
+
 	if thenEnd != nil {
 		thenEnd.Term = &Goto{Targets: []BlockID{join.ID}}
 	}
@@ -164,15 +162,19 @@ func lowerWhile(ctx *lowerCtx, cur *Block, s *boogie.While) (*Block, error) {
 
 func Structure(cfg *CFG) ([]boogie.Stmt, error) {
 	visited := make(map[BlockID]bool)
-	// TODO:
-	// We need a way to find where branches meet (Post-Dominators)
-	// For now, let's focus on the recursive fix.
-	return structBlock(cfg, cfg.Entry, visited)
+	path := make(map[BlockID]bool)
+	return structBlock(cfg, cfg.Entry, visited, path)
 }
 
-func structBlock(cfg *CFG, id BlockID, seen map[BlockID]bool) ([]boogie.Stmt, error) {
+func structBlock(cfg *CFG, id BlockID, seen map[BlockID]bool, path map[BlockID]bool) ([]boogie.Stmt, error) {
+	// Detect infinite recursion/unstructured cycles
+	if path[id] {
+		return nil, fmt.Errorf("unstructured cycle detected at block %d", id)
+	}
+
+	// Stop if we've already processed this block in this branch (join point)
 	if seen[id] {
-		return nil, nil // Stop recursion if we've seen this (loop header or join)
+		return nil, nil
 	}
 
 	b, ok := cfg.Blocks[id]
@@ -181,6 +183,9 @@ func structBlock(cfg *CFG, id BlockID, seen map[BlockID]bool) ([]boogie.Stmt, er
 	}
 
 	seen[id] = true
+	path[id] = true                     // Push to recursion stack
+	defer func() { path[id] = false }() // Pop when done
+
 	var result []boogie.Stmt
 	result = append(result, b.Stmts...)
 
@@ -190,26 +195,54 @@ func structBlock(cfg *CFG, id BlockID, seen map[BlockID]bool) ([]boogie.Stmt, er
 		return result, nil
 
 	case *If:
-		thenStmts, _ := structBlock(cfg, t.Then, copySeen(seen))
-		elseStmts, _ := structBlock(cfg, t.Else, copySeen(seen))
+		joinID := findJoinPoint(cfg, id)
 
+		// Prepare 'seen' maps for the branches.
+		// We mark joinID as 'seen' so the recursive calls stop before entering it.
+		branchSeen := copySeen(seen)
+		if joinID != 0 {
+			branchSeen[joinID] = true
+		}
+
+		// Process the Then and Else branches.
+		// They will stop once they reach the join point.
+		thenStmts, err := structBlock(cfg, t.Then, branchSeen, path)
+		if err != nil {
+			return nil, err
+		}
+
+		elseStmts, err := structBlock(cfg, t.Else, branchSeen, path)
+		if err != nil {
+			return nil, err
+		}
+
+		// Append the structured If to our results.
 		result = append(result, &boogie.If{
 			Cond: t.Cond,
 			Then: thenStmts,
 			Else: elseStmts,
 		})
 
-		// TODO:
-		// IMPORTANT: In our lowerIf, we have a 'join' block.
-		// We need to find it and continue structuring FROM there
-		// after the If statement is closed.
-		// joinID := findJoinPoint(t.Then, t.Else)
-		// rest, _ := structBlock(cfg, joinID, seen)
-		// result = append(result, rest...)
+		// 4. Continue structuring from the join point.
+		// This ensures the 'return' (or whatever code is at the join)
+		// appears exactly once after the if-block.
+		if joinID != 0 {
+			rest, err := structBlock(cfg, joinID, seen, path)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, rest...)
+		}
+		return result, nil
 
 	case *Goto:
 		if len(t.Targets) == 1 {
-			next, err := structBlock(cfg, t.Targets[0], seen)
+			tgt := t.Targets[0]
+			if seen[tgt] && !path[tgt] {
+				return result, nil // Reached a join point
+			}
+
+			next, err := structBlock(cfg, tgt, seen, path)
 			if err != nil {
 				return nil, err
 			}
@@ -219,6 +252,29 @@ func structBlock(cfg *CFG, id BlockID, seen map[BlockID]bool) ([]boogie.Stmt, er
 	return result, nil
 }
 
+func checkAndPullReturn(cfg *CFG, joinID BlockID) []boogie.Stmt {
+	if joinID == 0 {
+		return nil
+	}
+	jb := cfg.Blocks[joinID]
+	if ret, ok := jb.Term.(*Return); ok {
+		var stmts []boogie.Stmt
+		stmts = append(stmts, jb.Stmts...)
+		stmts = append(stmts, &boogie.Return{Values: ret.Values})
+		return stmts
+	}
+	return nil
+}
+
+func isSimpleReturn(term Terminator) bool {
+	ret, ok := term.(*Return)
+	if !ok {
+		return false
+	}
+	// It's a "simple" auto-generated return if it has no values
+	return len(ret.Values) == 0
+}
+
 func copySeen(seen map[BlockID]bool) map[BlockID]bool {
 	cp := make(map[BlockID]bool, len(seen))
 	for k, v := range seen {
@@ -226,4 +282,29 @@ func copySeen(seen map[BlockID]bool) map[BlockID]bool {
 	}
 
 	return cp
+}
+
+func findJoinPoint(cfg *CFG, id BlockID) BlockID {
+	// We look for a block reachable from 'id' that has multiple
+	// predecessors, implying it is a merge point for an If or a Loop.
+	visited := make(map[BlockID]bool)
+	queue := []BlockID{id}
+
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+
+		// If this block has multiple incoming edges, it's our join point.
+		if len(cfg.Pred[curr]) > 1 {
+			return curr
+		}
+
+		for _, next := range cfg.Succ[curr] {
+			if !visited[next] {
+				visited[next] = true
+				queue = append(queue, next)
+			}
+		}
+	}
+	return 0
 }

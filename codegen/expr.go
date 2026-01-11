@@ -45,40 +45,30 @@ func emitBinOp(b *boogie.BinOp) string {
 	l := EmitExpr(b.Left)
 	r := EmitExpr(b.Right)
 
+	// Return the raw string without the outer (...)
 	switch b.Op {
-
 	case boogie.Add:
-		return "(" + l + " + " + r + ")"
-
+		return l + " + " + r
 	case boogie.Sub:
-		return "(" + l + " - " + r + ")"
-
+		return l + " - " + r
 	case boogie.Mul:
-		return "(" + l + " * " + r + ")"
-
+		return l + " * " + r
 	case boogie.Eq:
-		return "(" + l + " == " + r + ")"
-
+		return l + " == " + r
 	case boogie.Lt:
-		return "(" + l + " < " + r + ")"
-
+		return l + " < " + r
 	case boogie.Lte:
-		return "(" + l + " <= " + r + ")"
-
+		return l + " <= " + r
 	case boogie.Gt:
-		return "(" + l + " > " + r + ")"
-
+		return l + " > " + r
 	case boogie.Gte:
-		return "(" + l + " >= " + r + ")"
-
+		return l + " >= " + r
 	case boogie.And:
-		return "(" + l + " && " + r + ")"
-
+		return l + " && " + r
 	case boogie.Or:
-		return "(" + l + " || " + r + ")"
-
+		return l + " || " + r
 	default:
-		panic("unsupported binary operator")
+		panic("unsupported binop")
 	}
 }
 
@@ -88,17 +78,13 @@ func emitBinOp(b *boogie.BinOp) string {
 
 func emitUnOp(u *boogie.UnOp) string {
 	x := EmitExpr(u.X)
-
 	switch u.Op {
-
 	case boogie.Not:
-		return "(!" + x + ")"
-
+		return "!" + x
 	case boogie.Neg:
-		return "(-" + x + ")"
-
+		return "-" + x
 	default:
-		panic("unsupported unary operator")
+		panic("unsupported unop")
 	}
 }
 

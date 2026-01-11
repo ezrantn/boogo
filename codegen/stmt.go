@@ -94,6 +94,7 @@ func emitCall(c *boogie.Call, indent int) string {
 }
 
 func emitReturn(r *boogie.Return, indent int) string {
+	// If no values, just "return"
 	if len(r.Values) == 0 {
 		return indentStr(indent) + "return\n"
 	}
@@ -103,8 +104,7 @@ func emitReturn(r *boogie.Return, indent int) string {
 		vals = append(vals, EmitExpr(v))
 	}
 
-	return indentStr(indent) +
-		"return " + strings.Join(vals, ", ") + "\n"
+	return indentStr(indent) + "return " + strings.Join(vals, ", ") + "\n"
 }
 
 func emitHeapWrite(h *boogie.HeapWrite, indent int) string {

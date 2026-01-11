@@ -1,6 +1,10 @@
 package ebs
 
-import "github.com/ezrantn/boogo/boogie"
+import (
+	"fmt"
+
+	"github.com/ezrantn/boogo/boogie"
+)
 
 type Resolver struct {
 	scopes []map[string]boogie.SymbolID
@@ -11,6 +15,14 @@ func NewResolver() *Resolver {
 	return &Resolver{
 		scopes: []map[string]boogie.SymbolID{make(map[string]boogie.SymbolID)},
 		nextID: 1,
+	}
+}
+
+func (tcx *TyCtx) Register(id boogie.SymbolID, name string, kind string, ty boogie.Type) {
+	tcx.NodeTypes[id] = ty
+	tcx.Resolutions[id] = Definition{
+		Name: name,
+		Kind: kind,
 	}
 }
 
@@ -43,4 +55,17 @@ func (r *Resolver) Resolve(name string) (boogie.SymbolID, bool) {
 		}
 	}
 	return 0, false
+}
+
+func (r *Resolver) ResolveExpr(e boogie.Expr) error {
+	switch t := e.(type) {
+	case *boogie.VarExpr:
+		id, ok := r.Resolve(t.Name)
+		if !ok {
+			return fmt.Errorf("undefined variable: %s", t.Name)
+		}
+		t.ID = id // Successfully "linked" the use to the definition
+		// ... handle other expression types
+	}
+	return nil
 }

@@ -179,24 +179,17 @@ func TestStructureIf(t *testing.T) {
 		t.Fatalf("structuring failed: %v", err)
 	}
 
-	// One structured If, return is absorbed into branches
-	if len(stmts) != 1 {
-		t.Fatalf("expected 1 stmt, got %d", len(stmts))
+	if len(stmts) != 2 {
+		t.Fatalf("expected 2 stmts, got %d", len(stmts))
 	}
 
-	ifStmt, ok := stmts[0].(*boogie.If)
+	_, ok := stmts[0].(*boogie.If)
 	if !ok {
 		t.Fatalf("expected If stmt, got %T", stmts[0])
 	}
 
-	// Then branch ends in return
-	if _, ok := ifStmt.Then[len(ifStmt.Then)-1].(*boogie.Return); !ok {
-		t.Fatalf("expected return in then branch")
-	}
-
-	// Else branch ends in return
-	if _, ok := ifStmt.Else[len(ifStmt.Else)-1].(*boogie.Return); !ok {
-		t.Fatalf("expected return in else branch")
+	if _, ok := stmts[1].(*boogie.Return); !ok {
+		t.Fatalf("expected Return as second stmt, got %T", stmts[1])
 	}
 }
 

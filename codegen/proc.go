@@ -56,14 +56,15 @@ func emitParams(vars []boogie.Var) string {
 }
 
 func emitReturns(vars []boogie.Var) string {
-	if len(vars) == 1 {
-		return goType(vars[0].Ty)
+	if len(vars) == 0 {
+		return ""
 	}
 
 	var rs []string
 	for _, v := range vars {
 		rs = append(rs, v.Name+" "+goType(v.Ty))
 	}
+
 	return "(" + strings.Join(rs, ", ") + ")"
 }
 
