@@ -30,8 +30,11 @@ func eraseStmts(stmts []boogie.Stmt) []boogie.Stmt {
 	for _, s := range stmts {
 		switch st := s.(type) {
 
-		case *boogie.Assert, *boogie.Assume:
+		case *boogie.Assume:
 			continue
+
+		case *boogie.Assert:
+			out = append(out, st)
 
 		case *boogie.If:
 			out = append(out, &boogie.If{

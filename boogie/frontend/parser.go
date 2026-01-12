@@ -311,12 +311,50 @@ func (p *Parser) parseStatements() []boogie.Stmt {
 
 			p.expect(SEMI)
 			stmts = append(stmts, &boogie.Return{Values: returnValues})
+		case CALL: // Add this case
+			stmts = append(stmts, p.parseCall())
 		default:
 			p.nextToken()
 		}
 	}
 
 	return stmts
+}
+
+func (p *Parser) parseCall() boogie.Stmt {
+	p.expect(CALL)
+
+	var lhsName string
+	if p.peek.Kind == ASSIGN {
+		lhsName = p.curr.Value
+		p.expect(IDENT)
+		p.expect(ASSIGN)
+	}
+
+	procName := p.curr.Value
+	p.expect(IDENT)
+
+	p.expect(LPAREN)
+	var args []boogie.Expr
+	for p.curr.Kind != RPAREN && p.curr.Kind != EOF {
+		args = append(args, p.parseExpression(PREC_LOWEST))
+		if p.curr.Kind == COMMA {
+			p.nextToken()
+		}
+	}
+	p.expect(RPAREN)
+	p.expect(SEMI)
+
+	var rets []boogie.Var
+	if lhsName != "" {
+		rets = append(rets, boogie.Var{Name: lhsName})
+	}
+
+	return &boogie.Call{
+		Name: procName,
+		Args: args,
+		Rets: rets,
+	}
 }
 
 func (p *Parser) parseAssertAssume() boogie.Stmt {

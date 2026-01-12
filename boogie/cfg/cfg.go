@@ -85,7 +85,7 @@ func lowerStmts(ctx *lowerCtx, cur *Block, stmts []boogie.Stmt) (*Block, error) 
 	for _, s := range stmts {
 		switch t := s.(type) {
 
-		case *boogie.Assign, *boogie.Assert, *boogie.Assume:
+		case *boogie.Assign, *boogie.Assert, *boogie.Assume, *boogie.Call:
 			cur.Stmts = append(cur.Stmts, s)
 
 		case *boogie.Return:
@@ -97,6 +97,11 @@ func lowerStmts(ctx *lowerCtx, cur *Block, stmts []boogie.Stmt) (*Block, error) 
 
 		case *boogie.While:
 			return lowerWhile(ctx, cur, t)
+
+		case *boogie.LocalDecl:
+			// Append it to Stmts so the generator knows to declare it in Go,
+			// or just continue if declarations are handled separately.
+			cur.Stmts = append(cur.Stmts, s)
 
 		default:
 			return nil, fmt.Errorf("unsupported stmt in EBS: %T", s)

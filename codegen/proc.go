@@ -10,9 +10,14 @@ import (
 func EmitProc(p *boogie.Procedure) string {
 	var b strings.Builder
 
+	name := p.Name
+	if name == "main" {
+		name = "_main" // Prevent collision with Go's entry point
+	}
+
 	// Function signature
 	b.WriteString("func ")
-	b.WriteString(p.Name)
+	b.WriteString(name)
 	b.WriteString("(")
 	b.WriteString(emitParams(p.Params))
 	b.WriteString(")")

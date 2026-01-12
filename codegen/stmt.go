@@ -32,7 +32,15 @@ func EmitStmt(s boogie.Stmt, indent int) string {
 
 	case *boogie.Assert:
 		cond := EmitExpr(st.Cond)
-		return indentStr(indent) + "if !" + cond + " { panic(\"Assertion failed\") }\n"
+		var b strings.Builder
+		b.WriteString(indentStr(indent) + "if !(" + cond + ") {\n")
+		b.WriteString(indentStr(indent+1) + "panic(\"Assertion failed\")\n")
+		b.WriteString(indentStr(indent) + "}\n")
+		return b.String()
+
+	case *boogie.LocalDecl:
+		// Render: var r int
+		return indentStr(indent) + "var " + st.V.Name + " " + emitType(st.V.Ty) + "\n"
 
 	default:
 		panic(fmt.Sprintf("unsupported statement in codegen: %T", s))
@@ -51,6 +59,17 @@ func EmitStmts(stmts []boogie.Stmt, indent int) string {
 // ========================
 // Individual statements
 // ========================
+
+func emitType(ty boogie.Type) string {
+	switch ty.(type) {
+	case boogie.IntType:
+		return "int"
+	case boogie.BoolType:
+		return "bool"
+	default:
+		return "interface{}"
+	}
+}
 
 func emitAssign(a *boogie.Assign, indent int) string {
 	lhs := EmitExpr(a.Lhs)
@@ -88,9 +107,16 @@ func emitCall(c *boogie.Call, indent int) string {
 		args = append(args, EmitExpr(a))
 	}
 
-	return indentStr(indent) +
-		c.Name +
-		"(" + strings.Join(args, ", ") + ")\n"
+	prefix := ""
+	if len(c.Rets) > 0 {
+		var rets []string
+		for _, r := range c.Rets {
+			rets = append(rets, r.Name)
+		}
+		prefix = strings.Join(rets, ", ") + " = "
+	}
+
+	return indentStr(indent) + prefix + c.Name + "(" + strings.Join(args, ", ") + ")\n"
 }
 
 func emitReturn(r *boogie.Return, indent int) string {

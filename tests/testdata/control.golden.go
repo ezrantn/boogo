@@ -48,3 +48,16 @@ func abs(x int) (y int) {
 	}
 	return
 }
+
+func _main() {
+	var r int
+	r = abs(-5)
+	if !(r == 5) {
+		panic("Assertion failed")
+	}
+	return
+}
+
+func main() {
+	_main()
+}

@@ -178,7 +178,7 @@ func TestRejectBadReturn(t *testing.T) {
 	mustReject(t, p)
 }
 
-func TestEraseRemovesAssert(t *testing.T) {
+func TestErasePreservesAssert(t *testing.T) {
 	p := &boogie.Program{
 		Procs: []*boogie.Procedure{
 			{
@@ -192,7 +192,7 @@ func TestEraseRemovesAssert(t *testing.T) {
 	}
 
 	e := Erase(p)
-	if len(e.Procs[0].Body) != 1 {
-		t.Fatalf("assert not erased")
+	if len(e.Procs[0].Body) != 2 {
+		t.Fatalf("assert should be preserved for codegen")
 	}
 }

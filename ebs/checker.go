@@ -276,6 +276,19 @@ func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[s
 
 		return checkHeapWrite(st)
 
+	case *boogie.Assert:
+		// Resolve the expression inside the assert (e.g., variables, ops)
+		if err := resolveAndCheckExpr(st.Cond, res, tcx); err != nil {
+			return fmt.Errorf("assert expression: %w", err)
+		}
+
+		// Ensure the expression evaluates to a boolean
+		if err := checkExprBool(st.Cond); err != nil {
+			return fmt.Errorf("assert condition must be bool: %w", err)
+		}
+
+		return nil
+
 	default:
 		return fmt.Errorf("unsupported statement type: %T", s)
 	}

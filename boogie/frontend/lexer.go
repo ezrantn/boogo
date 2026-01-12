@@ -51,6 +51,7 @@ const (
 	ELSE
 	WHILE
 	RETURN
+	CALL
 
 	// symbols
 	LPAREN
@@ -90,11 +91,10 @@ func (l *Lexer) NextToken() Token {
 		return Token{Kind: EOF, Value: ""}
 	}
 
-	if ch == '/' {
-		if l.peek() == '/' {
-			l.skipLineComment()
-			return l.NextToken()
-		}
+	if ch == '/' && l.peek() == '/' {
+		l.advance() // consume the second '/'
+		l.skipLineComment()
+		return l.NextToken()
 	}
 
 	// Handle Identifiers and Keywords
@@ -147,6 +147,10 @@ func (l *Lexer) NextToken() Token {
 		}
 		return Token{GT, ">"}
 	case '=':
+		if l.peek() == '=' {
+			l.advance()
+			return Token{EQ, "=="}
+		}
 		return Token{EQ, "="}
 	case '&':
 		if l.peek() == '&' {
@@ -182,6 +186,9 @@ var keywords = map[string]TokenKind{
 	"true":      BOOL_LIT,
 	"false":     BOOL_LIT,
 	"goto":      GOTO,
+	"call":      CALL,
+	"assert":    ASSERT,
+	"assume":    ASSUME,
 }
 
 func (l *Lexer) lexIdentifier() Token {

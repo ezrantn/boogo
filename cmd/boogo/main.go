@@ -90,14 +90,12 @@ func hasMain(p *boogie.Program) bool {
 	return false
 }
 
-// emitMainWrapper emits a Go main() that calls Boogie main().
+// emitMainWrapper emits the actual Go entry point
 func emitMainWrapper() string {
 	var b strings.Builder
-
 	b.WriteString("func main() {\n")
-	b.WriteString("\tmain()\n")
+	b.WriteString("\t_main()\n")
 	b.WriteString("}\n")
-
 	return b.String()
 }
 

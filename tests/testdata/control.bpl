@@ -7,3 +7,9 @@ procedure abs(x: int) returns (y: int)
   }
   return;
 }
+
+procedure main() {
+  var r: int;
+  call r := abs(-5);
+  assert r == 5;
+}
