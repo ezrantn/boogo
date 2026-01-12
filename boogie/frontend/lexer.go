@@ -37,6 +37,7 @@ func (l *Lexer) skipWhitespace() {
 
 const (
 	EOF TokenKind = iota
+	ILLEGAL
 
 	// identifiers + literals
 	IDENT
@@ -157,16 +158,23 @@ func (l *Lexer) NextToken() Token {
 			l.advance()
 			return Token{AND, "&&"}
 		}
+
+		return Token{ILLEGAL, "&"}
 	case '|':
 		if l.peek() == '|' {
 			l.advance()
 			return Token{OR, "||"}
 		}
+
+		return Token{ILLEGAL, "|"}
 	case '!':
 		return Token{NOT, "!"}
 	}
 
-	return Token{EOF, ""} // Or handle as ILLEGAL token?
+	// Handle illegal character that are not in Boogo spec
+	// such as (@, ~, ..)
+	badChar := l.advance()
+	return Token{Kind: ILLEGAL, Value: string(badChar)}
 }
 
 func (l *Lexer) skipLineComment() {
