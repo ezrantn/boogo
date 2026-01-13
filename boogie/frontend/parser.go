@@ -345,9 +345,9 @@ func (p *Parser) parseCall() boogie.Stmt {
 	p.expect(RPAREN)
 	p.expect(SEMI)
 
-	var rets []boogie.Var
+	var rets []*boogie.VarExpr
 	if lhsName != "" {
-		rets = append(rets, boogie.Var{Name: lhsName})
+		rets = append(rets, &boogie.VarExpr{V: boogie.Var{Name: lhsName}})
 	}
 
 	return &boogie.Call{

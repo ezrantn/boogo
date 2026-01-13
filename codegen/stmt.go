@@ -111,8 +111,9 @@ func emitCall(c *boogie.Call, indent int) string {
 	if len(c.Rets) > 0 {
 		var rets []string
 		for _, r := range c.Rets {
-			rets = append(rets, r.Name)
+			rets = append(rets, r.V.Name)
 		}
+
 		prefix = strings.Join(rets, ", ") + " = "
 	}
 

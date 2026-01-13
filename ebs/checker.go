@@ -130,7 +130,14 @@ func resolveAndCheckExpr(e boogie.Expr, res *Resolver, tcx *TyCtx) error {
 		}
 
 		return checkUnOp(ex)
+	case *boogie.HeapRead:
+		if err := resolveAndCheckExpr(ex.Obj, res, tcx); err != nil {
+			return err
+		}
+
+		return checkHeapRead(ex)
 	}
+
 	return nil
 }
 
@@ -157,7 +164,7 @@ func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[s
 			return fmt.Errorf("if condition resolution: %w", err)
 		}
 
-		if err := checkExprBool(st.Cond); err != nil {
+		if err := requireBoolExpr(st.Cond); err != nil {
 			return fmt.Errorf("if condition type error: %w", err)
 		}
 
@@ -193,7 +200,7 @@ func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[s
 			return err
 		}
 
-		if err := checkExprBool(st.Cond); err != nil {
+		if err := requireBoolExpr(st.Cond); err != nil {
 			return err
 		}
 
@@ -214,17 +221,26 @@ func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[s
 	case *boogie.Call:
 		// RECURSION CHECK:
 		if st.Name == cproc.Name {
-			return fmt.Errorf("recursive calls are not allowed: %s calls itself", cproc)
+			return fmt.Errorf("recursive calls are not allowed: %s calls itself", cproc.Name)
 		}
-
-		// Resolve arguments
+		
+		// Resolve Arguments
 		for _, arg := range st.Args {
 			if err := resolveAndCheckExpr(arg, res, tcx); err != nil {
 				return err
 			}
 		}
 
-		return checkCall(st, procMap)
+		// Resolve Return Variables (LHS of the call)
+		// Without this, st.Rets[i].Type() is nil, triggering the panic.
+		for _, ret := range st.Rets {
+			if err := resolveAndCheckExpr(ret, res, tcx); err != nil {
+				return fmt.Errorf("resolving call return: %w", err)
+			}
+		}
+
+		// Perform the signature/arity check
+		return checkCall(st, res, tcx, procMap)
 
 	case *boogie.Return:
 		// Check arity (number of return values)
@@ -282,7 +298,7 @@ func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[s
 		}
 
 		// Ensure the expression evaluates to a boolean
-		if err := checkExprBool(st.Cond); err != nil {
+		if err := requireBoolExpr(st.Cond); err != nil {
 			return fmt.Errorf("assert condition must be bool: %w", err)
 		}
 
@@ -297,47 +313,13 @@ func resolveAndCheckStmt(s boogie.Stmt, res *Resolver, tcx *TyCtx, procMap map[s
 // Expression Checking
 // ========================
 
-func checkExpr(e boogie.Expr) error {
-	switch ex := e.(type) {
-
-	case *boogie.VarExpr:
-		return nil
-
-	case *boogie.IntLit:
-		return nil
-
-	case *boogie.BoolLit:
-		return nil
-
-	case *boogie.BinOp:
-		if err := checkExpr(ex.Left); err != nil {
-			return err
-		}
-		if err := checkExpr(ex.Right); err != nil {
-			return err
-		}
-		return checkBinOp(ex)
-
-	case *boogie.UnOp:
-		if err := checkExpr(ex.X); err != nil {
-			return err
-		}
-		return checkUnOp(ex)
-
-	case *boogie.HeapRead:
-		return checkHeapRead(ex)
-
-	default:
-		return fmt.Errorf("unsupported expression in EBS v1: %T", e)
+func requireBoolExpr(e boogie.Expr) error {
+	if e.Type() == nil {
+		panic("internal error: expression has no type")
 	}
-}
 
-func checkExprBool(e boogie.Expr) error {
-	if err := checkExpr(e); err != nil {
-		return err
-	}
-	if _, ok := e.Type().(boogie.BoolType); !ok {
-		return fmt.Errorf("expected bool expression")
+	if e.Type().Kind() != boogie.BoolKind {
+		return fmt.Errorf("expected Bool expression, got %v", e.Type().Kind())
 	}
 	return nil
 }
@@ -347,11 +329,8 @@ func checkExprBool(e boogie.Expr) error {
 // ========================
 
 func checkAssign(a *boogie.Assign) error {
-	if err := checkExpr(a.Lhs); err != nil {
-		return err
-	}
-	if err := checkExpr(a.Rhs); err != nil {
-		return err
+	if a.Lhs.Type() == nil || a.Rhs.Type() == nil {
+		panic("internal error: assignment with untyped expression")
 	}
 
 	if !sameType(a.Lhs.Type(), a.Rhs.Type()) {
@@ -360,27 +339,63 @@ func checkAssign(a *boogie.Assign) error {
 	return nil
 }
 
-func checkCall(c *boogie.Call, procMap map[string]*boogie.Procedure) error {
+func checkCall(
+	c *boogie.Call,
+	res *Resolver,
+	tcx *TyCtx,
+	procMap map[string]*boogie.Procedure,
+) error {
+
 	target, ok := procMap[c.Name]
 	if !ok {
 		return fmt.Errorf("call to unknown procedure: %s", c.Name)
 	}
 
+	// arguments
 	if len(c.Args) != len(target.Params) {
-		return fmt.Errorf("arity mismatch in call to %s", c.Name)
+		return fmt.Errorf(
+			"arity mismatch in call to %s: expected %d args, got %d",
+			c.Name, len(target.Params), len(c.Args),
+		)
 	}
 
 	for i, arg := range c.Args {
-		if err := checkExpr(arg); err != nil {
-			return err
+		if arg.Type() == nil {
+			panic("internal error: untyped call argument")
 		}
+
 		if !sameType(arg.Type(), target.Params[i].Ty) {
-			return fmt.Errorf("argument %d type mismatch in call to %s", i, c.Name)
+			return fmt.Errorf(
+				"argument %d type mismatch in call to %s: expected %v, got %v",
+				i, c.Name,
+				target.Params[i].Ty.Kind(),
+				arg.Type().Kind(),
+			)
 		}
 	}
 
+	// return values
 	if len(c.Rets) != len(target.Rets) {
-		return fmt.Errorf("return arity mismatch in call to %s", c.Name)
+		return fmt.Errorf(
+			"return arity mismatch in call to %s: expected %d returns, got %d",
+			c.Name, len(target.Rets), len(c.Rets),
+		)
+	}
+
+	for i, ret := range c.Rets {
+		// ret must already be resolved
+		if ret.Type() == nil {
+			panic("internal error: unresolved call return variable")
+		}
+
+		if !sameType(ret.Type(), target.Rets[i].Ty) {
+			return fmt.Errorf(
+				"return value %d type mismatch in call to %s: expected %v, got %v",
+				i, c.Name,
+				target.Rets[i].Ty.Kind(),
+				ret.Type().Kind(),
+			)
+		}
 	}
 
 	return nil
@@ -428,12 +443,18 @@ func checkBinOp(b *boogie.BinOp) error {
 func checkUnOp(u *boogie.UnOp) error {
 	switch u.Op {
 	case boogie.Not:
-		requireBool(u.X)
-		requireType(u.Ty, boogie.BoolType{})
+		if err := requireBool(u.X); err != nil {
+			return err
+		}
+
+		u.Ty = boogie.BoolType{}
 		return nil
 	case boogie.Neg:
-		requireInt(u.X)
-		requireType(u.Ty, boogie.IntType{})
+		if err := requireInt(u.X); err != nil {
+			return err
+		}
+
+		u.Ty = boogie.IntType{}
 		return nil
 	default:
 		return fmt.Errorf("unsupported unary operator")
@@ -441,11 +462,7 @@ func checkUnOp(u *boogie.UnOp) error {
 }
 
 func checkHeapRead(h *boogie.HeapRead) error {
-	if err := checkExpr(h.Obj); err != nil {
-		return err
-	}
-
-	if _, ok := h.Obj.Type().(boogie.RefType); !ok {
+	if h.Obj.Type().Kind() != boogie.RefKind {
 		return fmt.Errorf("heap object must be ref type")
 	}
 
@@ -453,15 +470,10 @@ func checkHeapRead(h *boogie.HeapRead) error {
 }
 
 func checkHeapWrite(h *boogie.HeapWrite) error {
-	if err := checkExpr(h.Obj); err != nil {
-		return err
-	}
-	if _, ok := h.Obj.Type().(boogie.RefType); !ok {
+	if h.Obj.Type().Kind() != boogie.RefKind {
 		return fmt.Errorf("heap object must be ref type")
 	}
-	if err := checkExpr(h.Value); err != nil {
-		return err
-	}
+
 	return nil
 }
 
@@ -490,38 +502,4 @@ func requireBool(e boogie.Expr) error {
 	}
 
 	return nil
-}
-
-func requireType(got boogie.Type, want boogie.Type) error {
-	if got.Kind() != want.Kind() {
-		return fmt.Errorf("unexpected type: got %s, want %s", got, want)
-	}
-
-	return nil
-}
-
-func callsSelf(s boogie.Stmt, name string) bool {
-	switch st := s.(type) {
-	case *boogie.Call:
-		return st.Name == name
-	case *boogie.If:
-		for _, t := range st.Then {
-			if callsSelf(t, name) {
-				return true
-			}
-		}
-		for _, e := range st.Else {
-			if callsSelf(e, name) {
-				return true
-			}
-		}
-	case *boogie.While:
-		for _, b := range st.Body {
-			if callsSelf(b, name) {
-				return true
-			}
-		}
-	}
-
-	return false
 }

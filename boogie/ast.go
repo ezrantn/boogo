@@ -100,7 +100,7 @@ func (*While) isStmt() {}
 type Call struct {
 	Name string
 	Args []Expr
-	Rets []Var // explicit return assignment
+	Rets []*VarExpr // explicit return assignment
 }
 
 func (*Call) isStmt() {}
