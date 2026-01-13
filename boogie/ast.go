@@ -25,11 +25,22 @@ type Procedure struct {
 
 type Type interface {
 	isType()
+	Kind() TypeKind
 }
+
+type TypeKind int
+
+const (
+	IntKind TypeKind = iota
+	BoolKind
+	RefKind
+)
 
 type IntType struct{}
 type BoolType struct{}
 type RefType struct{} // abstract heap reference
+
+func (RefType) Kind() TypeKind { return RefKind }
 
 func (IntType) isType()  {}
 func (BoolType) isType() {}
@@ -138,6 +149,8 @@ type IntLit struct {
 	Ty    Type
 }
 
+func (IntType) Kind() TypeKind { return IntKind }
+
 func (*IntLit) isExpr() {}
 func (*IntLit) Type() Type {
 	return IntType{}
@@ -147,6 +160,8 @@ type BoolLit struct {
 	Value bool
 	Ty    Type
 }
+
+func (BoolType) Kind() TypeKind { return BoolKind }
 
 func (*BoolLit) isExpr() {}
 func (*BoolLit) Type() Type {
@@ -162,6 +177,7 @@ const (
 	Sub
 	Mul
 	Eq
+
 	Lt
 	Lte
 	Gt

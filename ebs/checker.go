@@ -7,7 +7,7 @@ import (
 )
 
 func Check(p *boogie.Program) error {
-	// 1. Map procedures for global lookup
+	// Map procedures for global lookup
 	procMap := make(map[string]*boogie.Procedure)
 	for _, proc := range p.Procs {
 		if _, ok := procMap[proc.Name]; ok {
@@ -16,12 +16,11 @@ func Check(p *boogie.Program) error {
 		procMap[proc.Name] = proc
 	}
 
-	// 2. Create the Type Context (Symbol Table)
-	tcx := NewTyCtx()
-
-	// 3. Run the checks
+	// Run the checks
 	for _, proc := range p.Procs {
+		tcx := NewTyCtx()
 		// Pass BOTH the procedure-specific tcx and the global procMap
+		// We assume procedures are checked in isolation
 		if err := checkProcedure(proc, tcx, procMap); err != nil {
 			return fmt.Errorf("procedure %s: %w", proc.Name, err)
 		}
@@ -470,29 +469,32 @@ func checkHeapWrite(h *boogie.HeapWrite) error {
 // Utilities
 // ========================
 
+// For checking type equality
 func sameType(a, b boogie.Type) bool {
-	return fmt.Sprintf("%T", a) == fmt.Sprintf("%T", b)
+	return a.Kind() == b.Kind()
 }
 
 func requireInt(e boogie.Expr) error {
-	if _, ok := e.Type().(boogie.IntType); !ok {
-		return fmt.Errorf("expected int expression, got %T", e.Type())
+	if e.Type().Kind() != boogie.IntKind {
+		return fmt.Errorf("type error: expected Int, got %s",
+			e.Type())
 	}
 
 	return nil
 }
 
 func requireBool(e boogie.Expr) error {
-	if _, ok := e.Type().(boogie.BoolType); !ok {
-		return fmt.Errorf("expected bool expression, got %T", e.Type())
+	if e.Type().Kind() != boogie.BoolKind {
+		return fmt.Errorf("type error: expected Bool, got %s",
+			e.Type())
 	}
 
 	return nil
 }
 
 func requireType(got boogie.Type, want boogie.Type) error {
-	if fmt.Sprintf("%T", got) != fmt.Sprintf("%T", want) {
-		return fmt.Errorf("unexpected type: got %T, want %T", got, want)
+	if got.Kind() != want.Kind() {
+		return fmt.Errorf("unexpected type: got %s, want %s", got, want)
 	}
 
 	return nil
