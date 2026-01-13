@@ -23,6 +23,8 @@ Boogie is an intermediate verification language used by tools such as Dafny/CIVL
 
 Boogo does **not** interpret Boogie and does **not** use solvers at runtime. The output is plain Go code compiled by the Go toolchain.
 
+Boogo treats Boogie as a typed, structured IR rather than a verification language, enforcing a total operational semantics for a restricted subset.
+
 Ok? but why do we need Boogie to be executed?
 
 - Boogie is the verification boundary: it exposes explicit control flow and heap semantics after verification, making it the right level to execute verified programs.
